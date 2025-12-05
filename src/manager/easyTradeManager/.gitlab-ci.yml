@@ -1,0 +1,215 @@
+stages:
+    - docker-dev
+    - deploy-to-dev
+    - dt-event
+    - docker-validated
+    - docker-stag
+    - release
+    - deploy-to-stag
+    - regcred-clean
+    - dev-clean
+    - stag-clean
+
+docker-dev:
+  rules:
+      - if: $CI_COMMIT_TAG == null
+  image: docker:27.2.0
+  stage: docker-dev
+  #needs: ["monaco", "init_keptn"]
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+    - cd easyTradeManager
+    - docker info
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID .
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - docker push $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID
+    - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+    - echo "$CI_PIPELINE_IID"
+  artifacts:
+        reports:
+            dotenv: auth.env
+
+deploy-to-dev:
+    rules:
+      - if: $CI_COMMIT_TAG == null
+    dependencies:
+        - docker-dev
+    stage: deploy-to-dev
+    image: alpine/kubectl:latest
+    script:
+        - cd easyTradeManager
+        - kubectl create secret docker-registry cartsregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
+        - kubectl create secret docker-registry cartsdeploycred --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n dev
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yml
+        - "kubectl -n dev apply -f manifest/carts.yml"
+        - kubectl wait pod -l app=carts  -n dev --for=condition=Ready --timeout=300s
+        - kubectl delete secret cartsregcred
+        - kubectl delete secret cartsdeploycred -n dev
+
+dt-event-push:
+    rules:
+      - if: $CI_COMMIT_TAG == null
+    stage: dt-event
+    dependencies:
+        - "deploy-to-dev"
+    image: alpine/curl:8.14.1
+    script:   
+        - echo "$CI_COMMIT_MESSAGE"
+        - echo "$CI_PIPELINE_IID"
+        - |
+            PAYLOAD1='{ "entitySelector": "type(SERVICE),entityName.startsWith('
+        - |
+            PAYLOAD2=' - )", "eventType": "CUSTOM_INFO", "properties": { "Gitlab Build Number": "'
+        - |
+            PAYLOAD3='", "Git commit": "'
+        - |
+            PAYLOAD4='" }, "title": "Deployment Event" }'
+        - |
+            PAYLOAD="$PAYLOAD1$CI_PROJECT_NAME$PAYLOAD2$CI_PIPELINE_IID$PAYLOAD3$CI_COMMIT_MESSAGE$PAYLOAD4"
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - |
+            PAYLOAD="${PAYLOAD//$'\n'/}"
+        - echo "$PAYLOAD" 
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - | 
+            curl -X "POST" \
+            "https://$DT_TENANT_UUID.live.dynatrace.com/api/v2/events/ingest" \
+            -H "accept: application/json; charset=utf-8" \
+            -H "Authorization: Api-Token $DT_ACCESS_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD"
+      
+docker-validated:
+  rules:
+      - if: $CI_COMMIT_TAG == null
+  image: docker:27.2.0
+  stage: imageBuildAndPush-validated
+  dependencies:
+    - docker-dev
+    - deploy-to-dev
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - docker pull $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+
+docker-stag:
+  image: docker:27.2.0
+  stage: docker-stag
+  rules:
+    - if: $CI_COMMIT_TAG  
+  #needs: ["monaco", "init_keptn"]
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+        - docker pull $CI_REGISTRY_IMAGE:latest
+        - docker tag $CI_REGISTRY_IMAGE:latest $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+        - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+  artifacts:
+        reports:
+            dotenv: auth.env
+
+release_job:
+  dependencies:
+        - docker-buildnpush-staging
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  script:
+    - echo "running release_job"
+  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
+
+deploy-to-stag:
+    dependencies:
+        - docker-stag
+    stage: deployStag
+    rules:
+        - if: $CI_COMMIT_TAG
+    image: alpine/kubectl:latest
+    script:
+        - cd easyTradeManager
+        - kubectl create secret docker-registry cartsregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
+        - kubectl create secret docker-registry cartsdeploycred --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n staging
+        - 'sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yml'
+        - 'sed -i "s#namespace: .*#namespace: staging#" manifest/carts.yml'
+        - "kubectl -n staging apply -f manifest/carts.yml"
+        - kubectl wait pod -l app=carts  -n staging --for=condition=Ready --timeout=300s
+        - kubectl delete secret cartsregcred
+        - kubectl delete secret cartsdeploycred -n staging
+
+regcred-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG == null
+    stage: regcred-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret cartsregcred
+    allow_failure: true
+
+dev-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG == null
+    stage: dev-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret cartsdeploycred -n dev
+    allow_failure: true
+
+stag-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG
+    stage: stag-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret cartsdeploycred -n staging
+    allow_failure: true
