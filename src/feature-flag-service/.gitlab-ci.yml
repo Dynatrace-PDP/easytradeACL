@@ -97,7 +97,7 @@ docker-validated:
   rules:
       - if: $CI_COMMIT_TAG == null
   image: docker:27.2.0
-  stage: imageBuildAndPush-validated
+  stage: docker-validated
   dependencies:
     - docker-dev
     - deploy-to-dev
@@ -152,7 +152,7 @@ docker-stag:
 
 release_job:
   dependencies:
-        - docker-buildnpush-staging
+        - docker-stag
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   rules:
@@ -166,7 +166,7 @@ release_job:
 deploy-to-stag:
     dependencies:
         - docker-stag
-    stage: deployStag
+    stage: deploy-stag
     rules:
         - if: $CI_COMMIT_TAG
     image: alpine/kubectl:latest
