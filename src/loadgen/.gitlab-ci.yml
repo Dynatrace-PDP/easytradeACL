@@ -1,15 +1,10 @@
 stages:
 #    - build
-    - docker-dev
-    - deploy-to-dev
+    - docker-prod
+    - deploy-to-prod
     - dt-event
-    - docker-validated
-    - docker-stag
-    - release
-    - deploy-to-stag
     - regcred-clean
-    - dev-clean
-    - stag-clean
+    - prod-clean
 #build:
 #  rules:
 #      - if: $CI_COMMIT_TAG == null
@@ -21,11 +16,11 @@ stages:
 #    - ./gradlew bootJar
 #    - ls -la
 
-docker-dev:
+docker-prod:
   rules:
       - if: $CI_COMMIT_TAG == null
   image: docker:27.2.0
-  stage: docker-dev
+  stage: docker-prod
   #needs: ["monaco", "init_keptn"]
   variables:
     DOCKER_HOST: tcp://docker:2376
@@ -51,23 +46,23 @@ docker-dev:
         reports:
             dotenv: auth.env
 
-deploy-to-dev:
+deploy-to-prod:
     rules:
       - if: $CI_COMMIT_TAG == null
     dependencies:
-        - docker-dev
+        - docker-prod
     stage: deploy-to-dev
     image: alpine/kubectl:latest
     script:
         - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
         - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
-        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n dev
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n prod
         - |
             sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
-        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
-        - kubectl wait pod -l app=$CI_PROJECT_NAME  -n dev --for=condition=Ready --timeout=300s
+        - "kubectl -n prod apply -f $CI_PROJECT_NAME.yaml"
+        - kubectl wait pod -l app=$CI_PROJECT_NAME  -n prod --for=condition=Ready --timeout=300s
         - kubectl delete secret $CI_PROJECT_NAME
-        - kubectl delete secret $CI_PROJECT_NAME -n dev
+        - kubectl delete secret $CI_PROJECT_NAME -n prod
 
 dt-event-push:
     rules:
@@ -104,95 +99,6 @@ dt-event-push:
             -H "Content-Type: application/json; charset=utf-8" \
             -d "$PAYLOAD"
       
-docker-validated:
-  rules:
-      - if: $CI_COMMIT_TAG == null
-  image: docker:27.2.0
-  stage: docker-validated
-  dependencies:
-    - docker-dev
-    - deploy-to-dev
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 0
-    DOCKER_DRIVER: overlay2
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
-    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
-    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
-  services:
-    - name: docker:27.2.0-dind
-      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
-  before_script:
-    - docker info
-  script:
-    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
-    - docker pull $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID
-    - docker tag $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:latest
-    - docker push $CI_REGISTRY_IMAGE:latest
-
-
-docker-stag:
-  image: docker:27.2.0
-  stage: docker-stag
-  rules:
-    - if: $CI_COMMIT_TAG  
-  #needs: ["monaco", "init_keptn"]
-  variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 0
-    DOCKER_DRIVER: overlay2
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
-    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
-    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
-  services:
-    - name: docker:27.2.0-dind
-      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
-  before_script:
-    - docker info
-  script:
-        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
-        - docker pull $CI_REGISTRY_IMAGE:latest
-        - docker tag $CI_REGISTRY_IMAGE:latest $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-        - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-        - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
-  artifacts:
-        reports:
-            dotenv: auth.env
-
-release_job:
-  dependencies:
-        - docker-stag
-  stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
-  script:
-    - echo "running release_job"
-  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
-    tag_name: '$CI_COMMIT_TAG'
-    description: '$CI_COMMIT_TAG'
-
-deploy-to-stag:
-    dependencies:
-        - docker-stag
-    stage: deploy-to-stag
-    rules:
-        - if: $CI_COMMIT_TAG
-    image: alpine/kubectl:latest
-    script:
-        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
-        - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
-        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n staging
-        - |
-            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
-        - |
-            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
-        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
-        - kubectl wait pod -l app=$CI_PROJECT_NAME  -n staging --for=condition=Ready --timeout=300s
-        - kubectl delete secret $CI_PROJECT_NAMEregcred
-        - kubectl delete secret $CI_PROJECT_NAMEdeploycred -n staging
 
 regcred-clean:
     rules:
@@ -204,22 +110,12 @@ regcred-clean:
         - kubectl delete secret $CI_PROJECT_NAME
     allow_failure: true
 
-dev-clean:
+prod-clean:
     rules:
         - when: on_failure
         - if: $CI_COMMIT_TAG == null
-    stage: dev-clean
+    stage: prod-clean
     image: alpine/kubectl:latest
     script:
-        - kubectl delete secret $CI_PROJECT_NAME -n dev
-    allow_failure: true
-
-stag-clean:
-    rules:
-        - when: on_failure
-        - if: $CI_COMMIT_TAG
-    stage: stag-clean
-    image: alpine/kubectl:latest
-    script:
-        - kubectl delete secret $CI_PROJECT_NAME -n staging
+        - kubectl delete secret $CI_PROJECT_NAME -n prod
     allow_failure: true

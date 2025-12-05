@@ -46,6 +46,7 @@ docker-dev:
     - docker build -t $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID .
     - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
     - docker push $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID
+    - cd ../
     - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
     - echo "$CI_PIPELINE_IID"
   artifacts:

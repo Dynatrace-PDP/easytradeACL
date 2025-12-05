@@ -5,7 +5,7 @@ WORKDIR /app
 COPY ["build.gradle", "settings.gradle", "gradlew", "./"]
 COPY ["gradle", "gradle"]
 
-RUN chmod +x ./gralew
+RUN chmod +x ./gradlew
 
 RUN ./gradlew dependencies
 
