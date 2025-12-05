@@ -26,3 +26,5 @@ spec:
               memory: 400Mi
             limits:
               memory: 400Mi
+      imagePullSecrets:
+        - name: contentcreator

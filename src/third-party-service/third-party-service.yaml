@@ -38,6 +38,8 @@ spec:
               memory: 450Mi
             limits:
               memory: 450Mi
+      imagePullSecrets:
+        - name: third-party-service
 ---
 apiVersion: v1
 kind: Service

@@ -25,6 +25,8 @@ spec:
               memory: 1.5Gi
             limits:
               memory: 1.5Gi
+      imagePullSecrets:
+        - name: db
 ---
 apiVersion: v1
 kind: Service

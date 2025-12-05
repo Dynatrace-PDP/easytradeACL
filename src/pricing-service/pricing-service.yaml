@@ -33,6 +33,8 @@ spec:
               memory: 80Mi
             limits:
               memory: 80Mi
+      imagePullSecrets:
+        - name: pricing-service
 ---
 apiVersion: v1
 kind: Service

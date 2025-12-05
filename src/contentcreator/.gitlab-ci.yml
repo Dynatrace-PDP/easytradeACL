@@ -1,4 +1,5 @@
 stages:
+#    - build
     - docker-dev
     - deploy-to-dev
     - dt-event
@@ -9,6 +10,16 @@ stages:
     - regcred-clean
     - dev-clean
     - stag-clean
+#build:
+#  rules:
+#      - if: $CI_COMMIT_TAG == null
+#  image: eclipse-temurin:21.0.8_9-jdk-alpine-3.22
+#  stage: build
+#  script:
+#    - chmod +x gradlew
+#    - ./gradlew dependencies
+#    - ./gradlew bootJar
+#    - ls -la
 
 docker-dev:
   rules:
@@ -48,15 +59,15 @@ deploy-to-dev:
     stage: deploy-to-dev
     image: alpine/kubectl:latest
     script:
-        - kubectl create secret docker-registry cartsregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
         - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
-        - kubectl create secret docker-registry cartsdeploycred --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n dev
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n dev
         - |
-            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yml
-        - "kubectl -n dev apply -f manifest/carts.yml"
-        - kubectl wait pod -l app=carts  -n dev --for=condition=Ready --timeout=300s
-        - kubectl delete secret cartsregcred
-        - kubectl delete secret cartsdeploycred -n dev
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - kubectl wait pod -l app=$CI_PROJECT_NAME  -n dev --for=condition=Ready --timeout=300s
+        - kubectl delete secret $CI_PROJECT_NAME
+        - kubectl delete secret $CI_PROJECT_NAME -n dev
 
 dt-event-push:
     rules:
@@ -166,20 +177,22 @@ release_job:
 deploy-to-stag:
     dependencies:
         - docker-stag
-    stage: deploy-stag
+    stage: deploy-to-stag
     rules:
         - if: $CI_COMMIT_TAG
     image: alpine/kubectl:latest
     script:
-        - kubectl create secret docker-registry cartsregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
         - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
-        - kubectl create secret docker-registry cartsdeploycred --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n staging
-        - 'sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yml'
-        - 'sed -i "s#namespace: .*#namespace: staging#" manifest/carts.yml'
-        - "kubectl -n staging apply -f manifest/carts.yml"
-        - kubectl wait pod -l app=carts  -n staging --for=condition=Ready --timeout=300s
-        - kubectl delete secret cartsregcred
-        - kubectl delete secret cartsdeploycred -n staging
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n staging
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - kubectl wait pod -l app=$CI_PROJECT_NAME  -n staging --for=condition=Ready --timeout=300s
+        - kubectl delete secret $CI_PROJECT_NAMEregcred
+        - kubectl delete secret $CI_PROJECT_NAMEdeploycred -n staging
 
 regcred-clean:
     rules:
@@ -188,7 +201,7 @@ regcred-clean:
     stage: regcred-clean
     image: alpine/kubectl:latest
     script:
-        - kubectl delete secret cartsregcred
+        - kubectl delete secret $CI_PROJECT_NAME
     allow_failure: true
 
 dev-clean:
@@ -198,7 +211,7 @@ dev-clean:
     stage: dev-clean
     image: alpine/kubectl:latest
     script:
-        - kubectl delete secret cartsdeploycred -n dev
+        - kubectl delete secret $CI_PROJECT_NAME -n dev
     allow_failure: true
 
 stag-clean:
@@ -208,5 +221,5 @@ stag-clean:
     stage: stag-clean
     image: alpine/kubectl:latest
     script:
-        - kubectl delete secret cartsdeploycred -n staging
+        - kubectl delete secret $CI_PROJECT_NAME -n staging
     allow_failure: true

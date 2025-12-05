@@ -24,6 +24,8 @@ spec:
               memory: 175Mi
             limits:
               memory: 175Mi
+      imagePullSecrets:
+        - name: rabbitmq
 ---
 apiVersion: v1
 kind: Service

@@ -38,6 +38,8 @@ spec:
               memory: 150Mi
             limits:
               memory: 150Mi
+      imagePullSecrets:
+        - name: offerservice
 ---
 apiVersion: v1
 kind: Service

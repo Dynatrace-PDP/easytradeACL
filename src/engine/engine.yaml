@@ -27,6 +27,8 @@ spec:
               memory: 450Mi
             limits:
               memory: 450Mi
+      imagePullSecrets:
+        - name: engine
 ---
 apiVersion: v1
 kind: Service

@@ -60,3 +60,5 @@ spec:
               memory: 15Mi
             limits:
               memory: 15Mi
+      imagePullSecrets:
+        - name: problem-operator

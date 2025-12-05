@@ -24,3 +24,5 @@ spec:
               memory: 25Mi
             limits:
               memory: 25Mi
+      imagePullSecrets:
+        - name: calculationservice

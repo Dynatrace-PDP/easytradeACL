@@ -30,6 +30,8 @@ spec:
               memory: 600Mi
             limits:
               memory: 600Mi
+      imagePullSecrets:
+        - name: manager
 ---
 apiVersion: v1
 kind: Service

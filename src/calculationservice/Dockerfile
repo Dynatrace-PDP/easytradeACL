@@ -45,4 +45,6 @@ USER easytrade
 COPY --from=build --chown=easytrade:easytrade ["/src/consumeCandleData", "."]
 COPY --chown=easytrade:easytrade ["entrypoint.sh", "."]
 
+RUN chmod +x ./entrypoint.sh
+
 CMD ["./entrypoint.sh"]

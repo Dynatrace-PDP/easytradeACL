@@ -4,6 +4,9 @@ WORKDIR /app
 # make gradlew download gradle files before copying source files to use caching
 COPY ["gradle", "gradle"]
 COPY ["build.gradle", "settings.gradle", "gradlew", "./"]
+
+RUN chmod +x ./gradlew
+
 RUN ./gradlew dependencies
 
 COPY ["src", "./src"]

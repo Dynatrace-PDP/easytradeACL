@@ -27,3 +27,5 @@ spec:
               memory: 2Gi
             limits:
               memory: 2Gi
+      imagePullSecrets:
+        - name: loadgen

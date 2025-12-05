@@ -23,6 +23,8 @@ spec:
               memory: 75Mi
             limits:
               memory: 75Mi
+      imagePullSecrets:
+        - name: frontend
 ---
 apiVersion: v1
 kind: Service

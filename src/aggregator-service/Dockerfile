@@ -23,4 +23,6 @@ WORKDIR /home/easytrade
 
 COPY --from=build --chown=easytrade:easytrade ["/build/aggregator-service", "/build/config.yaml", "./"]
 
+RUN chmod +x ./aggregator-service
+
 CMD [ "./aggregator-service" ]

@@ -33,3 +33,5 @@ spec:
               memory: 30Mi
             limits:
               memory: 30Mi
+      imagePullSecrets:
+        - name: aggregator-service

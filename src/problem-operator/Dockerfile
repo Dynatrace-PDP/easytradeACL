@@ -21,4 +21,6 @@ WORKDIR /home/easytrade
 
 COPY --from=build --chown=easytrade:easytrade ["/build/problem-operator", "./"]
 
+RUN chmod +x ./problem-operator
+
 CMD [ "./problem-operator" ]

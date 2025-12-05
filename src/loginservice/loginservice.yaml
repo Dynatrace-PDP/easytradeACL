@@ -30,6 +30,8 @@ spec:
               memory: 450Mi
             limits:
               memory: 450Mi
+      imagePullSecrets:
+        - name: loginservice
 ---
 apiVersion: v1
 kind: Service

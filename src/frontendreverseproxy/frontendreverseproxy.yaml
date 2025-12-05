@@ -23,6 +23,8 @@ spec:
               memory: 100Mi
             limits:
               memory: 100Mi
+      imagePullSecrets:
+        - name: frontendreverseproxy
 ---
 apiVersion: v1
 kind: Service

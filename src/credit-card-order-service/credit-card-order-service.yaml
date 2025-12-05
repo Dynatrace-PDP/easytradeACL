@@ -41,6 +41,8 @@ spec:
               memory: 650Mi
             limits:
               memory: 650Mi
+      imagePullSecrets:
+        - name: credit-card-order-service
 ---
 apiVersion: v1
 kind: Service
