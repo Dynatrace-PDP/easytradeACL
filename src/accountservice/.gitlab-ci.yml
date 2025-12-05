@@ -1,5 +1,5 @@
 stages:
-    - build
+#    - build
     - docker-dev
     - deploy-to-dev
     - dt-event
@@ -10,16 +10,16 @@ stages:
     - regcred-clean
     - dev-clean
     - stag-clean
-build:
-  rules:
-      - if: $CI_COMMIT_TAG == null
-  image: eclipse-temurin:21.0.8_9-jdk-alpine-3.22
-  stage: build
-  script:
-    - chmod +x gradlew
-    - ./gradlew dependencies
-    - ./gradlew bootJar
-    - ls -la
+#build:
+#  rules:
+#      - if: $CI_COMMIT_TAG == null
+#  image: eclipse-temurin:21.0.8_9-jdk-alpine-3.22
+#  stage: build
+#  script:
+#    - chmod +x gradlew
+#    - ./gradlew dependencies
+#    - ./gradlew bootJar
+#    - ls -la
 
 docker-dev:
   rules:
