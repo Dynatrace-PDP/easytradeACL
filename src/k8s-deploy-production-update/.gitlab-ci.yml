@@ -1,0 +1,91 @@
+spec:
+  inputs:
+    SERVICE:
+       description: "The Service that should be updated and promoted to prod"
+    VERSION:
+       description: "The Version that the Service is being updated to"
+
+---
+stages:
+   - dockerlogin
+   - prod-update
+   - dt-event
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: 1
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+dockerlogin:
+    stage: dockerlogin
+    image: docker:24.0.5
+    services:
+        - name: docker:24.0.5-dind
+          variables:
+            HEALTHCHECK_TCP_PORT: "2376"
+    before_script:
+        - docker info
+    script:
+        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+        - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+        - echo "$CI_PIPELINE_IID"
+    artifacts:
+        reports:
+            dotenv: auth.env
+
+kube-prod-update:
+    stage: prod-update
+    image: alpine/kubectl:latest
+    script:
+        - kubectl create secret docker-registry prodregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
+        - ls
+        - SERVICE=$(echo "$[[ inputs.SERVICE ]]")
+        - VERSION=$(echo "$[[ inputs.VERSION ]]")
+        # update images
+        - | 
+           sed -i "s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=$SERVICE`#" $SERVICE.yaml
+        # update version
+        - | 
+           sed -i "s#  app.kubernetes.io/version: v1#  app.kubernetes.io/version: $VERSION#" $SERVICE.yaml
+        # update name
+        - | 
+           sed -i "s#  name: $SERVICE#  name: $SERVICE-$VERSION#" $SERVICE.yaml
+        - |
+           kubectl apply -f $SERVICE.yaml -n prod
+        - sleep 60
+        - kubectl delete secret prodregcred
+        - kubectl delete secret proddeploycred -n prod
+
+
+dt-event-push:
+    stage: dt-event
+    image: alpine/curl:8.14.1
+    script:   
+        - echo "$CI_COMMIT_MESSAGE"
+        - echo "$CI_PIPELINE_IID"
+        - |
+            PAYLOAD1='{ "entitySelector": "type(SERVICE),entityName.startsWith('
+        - |
+            PAYLOAD2=' - "),toRelationships.isNamespaceOfService(type(CLOUD_APPLICATION_NAMESPACE),entityName.equals(prod)), "eventType": "CUSTOM_INFO", "properties": { "Gitlab Build Number": "'
+        - |
+            PAYLOAD3='", "Git commit": "'
+        - |
+            PAYLOAD4='" }, "title": "Deployment Event" }'
+        - |
+            PAYLOAD="$PAYLOAD1$SERVICE$PAYLOAD2$VERSION$PAYLOAD3$CI_COMMIT_MESSAGE$PAYLOAD4"
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - |
+            PAYLOAD="${PAYLOAD//$'\n'/}"
+        - echo "$PAYLOAD" 
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - | 
+            curl -X "POST" \
+            "https://$DT_TENANT_UUID.live.dynatrace.com/api/v2/events/ingest" \
+            -H "accept: application/json; charset=utf-8" \
+            -H "Authorization: Api-Token $DT_ACCESS_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD"

@@ -1,0 +1,20 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: sockshop
+  namespace: prod
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`sockshop.<INGRESS DOMAIN>`)
+      services:
+      - kind: Service
+        name: front-end
+        port: 8080
+        weight: 50
+      - kind: Service
+        name: front-end-v2
+        port: 8080
+        weight: 50

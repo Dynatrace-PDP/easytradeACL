@@ -1,0 +1,36 @@
+spec:
+  inputs:
+    VERSION1:
+      description: 'Percentage of traffic to be routed to version 1'
+    VERSION2:
+      description: 'Percentage of traffic to be routed to version 2'
+---
+stages:
+   - dt-event
+
+dt-event-push:
+    stage: dt-event
+    image: alpine/curl:8.14.1
+    script:
+        - VERSION1=$(echo "$[[ inputs.VERSION1 ]]")
+        - VERSION2=$(echo "$[[ inputs.VERSION2 ]]")
+        - |
+            PAYLOAD1='{"input": {"version1": "'
+        - |
+            PAYLOAD2='", "version2": "'
+        - | 
+            PAYLOAD3='", "domain": "'
+        - | 
+            PAYLOAD4='"}}'
+        - |
+            PAYLOAD="$PAYLOAD1$VERSION1$PAYLOAD2$VERSION2$PAYLOAD3$DOMAIN$PAYLOAD4"
+        - echo "$BEARER_TOKEN"
+        - echo "$PAYLOAD"
+        - echo "$WORKFLOW_UUID"
+        - |
+            curl \
+            -H "Authorization: Bearer $BEARER_TOKEN" \
+            -H 'accept: application/json' \
+            -H 'Content-Type: application/json' \
+            -X POST "https://$DT_TENANT_UUID.apps.dynatrace.com/platform/automation/v1/workflows/$WORKFLOW_UUID/run" \
+            -d "$PAYLOAD"

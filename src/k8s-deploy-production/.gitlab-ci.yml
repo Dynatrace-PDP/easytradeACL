@@ -1,0 +1,110 @@
+stages:
+  - dockerlogin
+  - deployProd
+  - dt-event
+  - regcred-clean
+  - deploy-clean
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: 1
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+
+dockerlogin:
+    stage: dockerlogin
+    image: docker:24.0.5
+    services:
+        - name: docker:24.0.5-dind
+          variables:
+            HEALTHCHECK_TCP_PORT: "2376"
+    before_script:
+        - docker info
+    script:
+        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+        - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+        - echo "$CI_PIPELINE_IID"
+    artifacts:
+        reports:
+            dotenv: auth.env
+
+deploy-to-prod:
+    dependencies:
+        - dockerlogin
+    stage: deployProd
+    image: alpine/kubectl:latest
+    script:
+        - kubectl create secret docker-registry prodregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
+        - kubectl create secret docker-registry proddeploycred --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n prod
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=aggregator_service`#\" aggregator-service.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=broker-service`#\" broker-service.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=contentcreator`#\" contentcreator.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=credit-card-order-service`#\" credit-card-order-service.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=db`#\" db.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=engine`#\" engine.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=feature-flag-service`#\" feature-flag-service.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=frontend`#\" frontend.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=frontendreverseproxy`#\" frontendreverseproxy.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=loadgen`#\" loadgen.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=loginservice`#\" loginservice.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=manager`#\" manager.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=offerservice`#\" offerservice.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=pricing-service`#\" pricing-service.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=problem-operator`#\" problem-operator.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=rabbitmq`#\" rabbitmq.yaml"
+        -  "sed -i \"s#image: .*#image: `kubectl -n staging get deployment -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' --field-selector=metadata.name=third-party-service`#\" third-party-service.yaml"
+        -  kubectl -n prod apply -f ./
+        - sleep 60
+        - kubectl delete secret prodregcred
+        - kubectl delete secret proddeploycred -n prod
+
+dt-event-push:
+    rules:
+      - if: $CI_COMMIT_TAG == null
+    stage: dt-event
+    image: alpine/curl:8.14.1
+    script:   
+        - echo "$CI_COMMIT_MESSAGE"
+        - echo "$CI_PIPELINE_IID"
+        - |
+            PAYLOAD1='{ "entitySelector": "type(SERVICE)'
+        - |
+            PAYLOAD2='", "eventType": "CUSTOM_INFO", "properties": { "Gitlab Build Number": "'
+        - |
+            PAYLOAD3='", "Git commit": "'
+        - |
+            PAYLOAD4='" }, "title": "Deployment Event" }'
+        - |
+            PAYLOAD="$PAYLOAD1$PAYLOAD2$CI_PIPELINE_IID$PAYLOAD3$CI_COMMIT_MESSAGE$PAYLOAD4"
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - |
+            PAYLOAD="${PAYLOAD//$'\n'/}"
+        - echo "$PAYLOAD" 
+        - |
+            PAYLOAD=$(echo "$PAYLOAD")
+        - | 
+            curl -X "POST" \
+            "https://$DT_TENANT_UUID.live.dynatrace.com/api/v2/events/ingest" \
+            -H "accept: application/json; charset=utf-8" \
+            -H "Authorization: Api-Token $DT_ACCESS_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD"
+
+regcred-cleaner:
+    rules:
+        - when: on_failure
+    stage: regcred-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret prodregcred
+    allow_failure: true
+
+deploy-cleaner:
+    rules:
+        - when: on_failure
+    stage: deploy-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret proddeploycred -n prod
