@@ -191,8 +191,8 @@ deploy-to-stag:
             sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
         - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
         - kubectl wait pod -l app=$CI_PROJECT_NAME  -n staging --for=condition=Ready --timeout=300s
-        - kubectl delete secret $CI_PROJECT_NAMEregcred
-        - kubectl delete secret $CI_PROJECT_NAMEdeploycred -n staging
+        - kubectl delete secret $CI_PROJECT_NAME
+        - kubectl delete secret $CI_PROJECT_NAME -n staging
 
 regcred-clean:
     rules:

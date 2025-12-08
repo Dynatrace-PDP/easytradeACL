@@ -14,5 +14,6 @@ COPY ./sql-scripts/ /my-app
 EXPOSE 1433
 
 RUN chmod +x ./entrypoint.sh
+RUN chmod +x ./run-initialization.sh
 
 ENTRYPOINT [ "./entrypoint.sh" ]

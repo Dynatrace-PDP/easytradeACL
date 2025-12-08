@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    kubernetes.io/ingress.provider: traefik
+    traefik.ingress.kubernetes.io/forwarded-proto: https
+  labels:
+    app: front-end
+  name: front-end-dev
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: frontend.dev.a8cfccc8-ace9-4186-9308-3dd2022df5b6.dynatrace.training
+    http:
+      paths:
+      - backend:
+          service:
+            name: frontendreverseproxy-easytrade
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
