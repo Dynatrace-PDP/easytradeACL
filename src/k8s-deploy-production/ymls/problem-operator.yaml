@@ -35,10 +35,12 @@ spec:
   selector:
     matchLabels:
       app: problem-operator
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: problem-operator
+        app.kubernetes.io/version: v1
     spec:
       serviceAccountName: problem-operator-service-account
       containers:

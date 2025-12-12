@@ -6,10 +6,13 @@ spec:
   selector:
     matchLabels:
       app: credit-card-order-service
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: credit-card-order-service
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: credit-card-order-service
@@ -38,11 +41,11 @@ spec:
           resources:
             requests:
               cpu: 20m
-              memory: 650Mi
+              memory: 350Mi
             limits:
-              memory: 650Mi
+              memory: 350Mi
       imagePullSecrets:
-        - name: proddeploycred credit-card-order-service
+        - name: proddeploycred 
 ---
 apiVersion: v1
 kind: Service
@@ -52,6 +55,7 @@ spec:
   type: ClusterIP
   selector:
     app: credit-card-order-service
+    app.kubernetes.io/version: v1
   ports:
     - name: http
       port: 8080

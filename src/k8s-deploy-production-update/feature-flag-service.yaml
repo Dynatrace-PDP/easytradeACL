@@ -6,10 +6,13 @@ spec:
   selector:
     matchLabels:
       app: feature-flag-service
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: feature-flag-service
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: feature-flag-service
@@ -20,11 +23,11 @@ spec:
           resources:
             requests:
               cpu: 30m
-              memory: 600Mi
+              memory: 300Mi
             limits:
-              memory: 600Mi
+              memory: 300Mi
       imagePullSecrets:
-        - name: proddeploycred feature-flag-service
+        - name: proddeploycred 
 ---
 apiVersion: v1
 kind: Service
@@ -34,6 +37,7 @@ spec:
   type: ClusterIP
   selector:
     app: feature-flag-service
+    app.kubernetes.io/version: v1
   ports:
     - name: feature-flag-service
       port: 8080

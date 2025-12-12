@@ -6,10 +6,12 @@ spec:
   selector:
     matchLabels:
       app: pricing-service
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: pricing-service
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: pricing-service
@@ -34,7 +36,7 @@ spec:
             limits:
               memory: 80Mi
       imagePullSecrets:
-        - name: proddeploycred pricing-service
+        - name: proddeploycred 
 ---
 apiVersion: v1
 kind: Service
@@ -44,6 +46,7 @@ spec:
   type: ClusterIP
   selector:
     app: pricing-service
+    app.kubernetes.io/version: v1
   ports:
     - name: http
       port: 8080

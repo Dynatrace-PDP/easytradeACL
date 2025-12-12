@@ -6,10 +6,12 @@ spec:
   selector:
     matchLabels:
       app: third-party-service
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: third-party-service
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: third-party-service
@@ -39,7 +41,7 @@ spec:
             limits:
               memory: 450Mi
       imagePullSecrets:
-        - name: proddeploycred third-party-service
+        - name: proddeploycred 
 ---
 apiVersion: v1
 kind: Service
@@ -49,6 +51,7 @@ spec:
   type: ClusterIP
   selector:
     app: third-party-service
+    app.kubernetes.io/version: v1
   ports:
     - name: http
       port: 8080

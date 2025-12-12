@@ -16,10 +16,13 @@ spec:
   selector:
     matchLabels:
       app: broker-service
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: broker-service
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: broker-service
@@ -55,6 +58,7 @@ spec:
   type: ClusterIP
   selector:
     app: broker-service
+    app.kubernetes.io/version: v1
   ports:
     - name: http
       port: 8080

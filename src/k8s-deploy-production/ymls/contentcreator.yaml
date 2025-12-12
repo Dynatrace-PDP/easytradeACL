@@ -6,10 +6,12 @@ spec:
   selector:
     matchLabels:
       app: contentcreator
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: contentcreator
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: contentcreator

@@ -6,10 +6,13 @@ spec:
   selector:
     matchLabels:
       app: db
+      app.kubernetes.io/version: v1
   template:
     metadata:
       labels:
         app: db
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/version: v1
     spec:
       containers:
         - name: db
@@ -36,6 +39,7 @@ spec:
   type: ClusterIP
   selector:
     app: db
+    app.kubernetes.io/version: v1
   ports:
     - name: mssql
       port: 1433
