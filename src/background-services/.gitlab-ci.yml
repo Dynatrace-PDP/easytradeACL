@@ -1,0 +1,352 @@
+stages:
+    - docker-dev
+    - deploy-to-dev
+    - dt-event
+    - docker-validated
+    - docker-stag
+    - release
+    - deploy-to-stag
+    - regcred-clean
+    - dev-clean
+    - stag-clean
+
+docker-dev:
+  rules:
+      - if: $CI_COMMIT_TAG == null
+  image: docker:27.2.0
+  stage: docker-dev
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+    - docker info
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+    - cd accountservice
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-ACCOUNTSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-ACCOUNTSERVICE-$CI_PIPELINE_IID
+    - echo "$CI_PIPELINE_IID"
+    - cd ../aggregator-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-AGGREGATORSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-AGGREGATORSERVICE-$CI_PIPELINE_IID
+    - cd ../broker-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID
+    - cd ../calculationservice
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID
+    - cd ../credit-card-order-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-CREDITCARDORDERSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-CREDITCARDORDERSERVICE-$CI_PIPELINE_IID
+    - cd ../feature-flag-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-FEATUREFLAGSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-FEATUREFLAGSERVICE-$CI_PIPELINE_IID
+    - cd ../loginservice
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-LOGINSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-LOGINSERVICE-$CI_PIPELINE_IID
+    - cd ../offerservice
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-OFFERSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-OFFERSERVICE-$CI_PIPELINE_IID
+    - cd ../pricing-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-PRICINGSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-PRICINGSERVICE-$CI_PIPELINE_IID
+    - cd ../third-party-service
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-THIRDPARTYSERVICE-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-THIRDPARTYSERVICE-$CI_PIPELINE_IID
+  artifacts:
+        reports:
+            dotenv: auth.env
+
+deploy-to-dev:
+    rules:
+      - if: $CI_COMMIT_TAG == null
+    dependencies:
+        - docker-dev
+    stage: deploy-to-dev
+    image: alpine/kubectl:latest
+    script:
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n dev
+        - cd accountservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-ACCOUNTSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../aggregator-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-AGGREGATORSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../broker-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - ../calculationservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../credit-card-order-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-CREDITCARDORDERSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../feature-flag-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-FEATUREFLAGSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../loginservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-LOGINSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../offerservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-OFFERSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../pricing-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-PRICINGSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../third-party-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-THIRDPARTYSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - sleep 10
+        - kubectl wait pod --all -l app.kubernetes.io/component=$CI_PROJECT_NAME  -n dev --for=condition=Ready --timeout=300s
+        - kubectl delete secret $CI_PROJECT_NAME
+        - kubectl delete secret $CI_PROJECT_NAME -n dev
+      
+docker-validated:
+  rules:
+      - if: $CI_COMMIT_TAG == null
+  image: docker:27.2.0
+  stage: docker-validated
+  dependencies:
+    - docker-dev
+    - deploy-to-dev
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+    - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - docker pull $CI_REGISTRY_IMAGE:DEV-ACCOUNTSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-ACCOUNTSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-AGGREGATORSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-AGGREGATORSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:BROKERSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:BROKERSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-CREDITCARDORDERSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-CREDITCARDORDERSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-FEATUREFLAGSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-FEATUREFLAGSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-LOGINSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-LOGINSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:LOGINSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:LOGINSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-OFFERSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-OFFERSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:OFFERSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:OFFERSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-PRICINGSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-PRICINGSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest
+    - docker pull $CI_REGISTRY_IMAGE:DEV-THIRDPARTYSERVICE-$CI_PIPELINE_IID
+    - docker tag $CI_REGISTRY_IMAGE:DEV-THIRDPARTYSERVICE-$CI_PIPELINE_IID $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-latest
+    - docker push $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-latest
+    
+
+docker-stag:
+  image: docker:27.2.0
+  stage: docker-stag
+  rules:
+    - if: $CI_COMMIT_TAG  
+  #needs: ["monaco", "init_keptn"]
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 0
+    DOCKER_DRIVER: overlay2
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    #important! MTU 1410 makes the MTU packages compatible with the underlying network. Otherwise, it will get stuck in downloads 
+    DOCKER_DAEMON_OPTIONS: "--insecure-registry=$CI_REGISTRY --mtu=1410"
+  services:
+    - name: docker:27.2.0-dind
+      entrypoint: [ "sh", "-c", "dockerd-entrypoint.sh $DOCKER_DAEMON_OPTIONS" ]
+  before_script:
+    - docker info
+  script:
+        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+        - echo "AUTH_TOKEN=$(sed -nE '$!{:a;N;$!ba;s/\n//g;s/"auth":[^"]*"([^"]*)"/\n\1\nAUTH/g};/^[^\n]*\nAUTH/P;D' ~/.docker/config.json)" >> auth.env
+        - docker pull $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-latest $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-latest $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:BROKERSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:BROKERSERVICE-latest $CI_REGISTRY_IMAGE:BROKERSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:BROKERSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-latest $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-latest $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-latest $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:LOGINSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:LOGINSERVICE-latest $CI_REGISTRY_IMAGE:LOGINSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:LOGINSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:OFFERSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:OFFERSERVICE-latest $CI_REGISTRY_IMAGE:OFFERSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:FEATUOFFERSERVICEREFLAGSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest $CI_REGISTRY_IMAGE:PRICINGSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:PRICINGSERVICE-$CI_COMMIT_TAG
+        - docker pull $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-latest
+        - docker tag $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-latest $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-$CI_COMMIT_TAG
+  artifacts:
+        reports:
+            dotenv: auth.env
+
+release_job:
+  dependencies:
+        - docker-stag
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  script:
+    - echo "running release_job"
+  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
+
+deploy-to-stag:
+    dependencies:
+        - docker-stag
+    stage: deploy-to-stag
+    rules:
+        - if: $CI_COMMIT_TAG
+    image: alpine/kubectl:latest
+    script:
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
+        - kubectl create secret docker-registry $CI_PROJECT_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_DEPLOY_USER --docker-password=$CI_DEPLOY_PASSWORD -n staging
+        - cd accountservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:ACCOUNTSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../aggregator-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:AGGREGATORSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../broker-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:BROKERSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../calculationservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:CALCULATIONSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../credit-card-order-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:CREDITCARDORDERSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../feature-flag-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:FEATUREFLAGSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../loginservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:LOGINSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../offerservice
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:OFFERSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../pricing-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:PRICINGSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - cd ../third-party-service
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:THIRDPARTYSERVICE-$CI_COMMIT_TAG#" $CI_PROJECT_NAME.yaml
+        - |
+            sed -i "s#namespace: .*#namespace: staging#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n staging apply -f $CI_PROJECT_NAME.yaml"
+        - sleep 10
+        - kubectl wait pod --all -l app.kubernetes.io/component=$CI_PROJECT_NAME  -n staging --for=condition=Ready --timeout=300s
+        - kubectl delete secret $CI_PROJECT_NAME
+        - kubectl delete secret $CI_PROJECT_NAME -n staging
+
+regcred-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG == null
+    stage: regcred-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret $CI_PROJECT_NAME
+    allow_failure: true
+
+dev-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG == null
+    stage: dev-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret $CI_PROJECT_NAME -n dev
+    allow_failure: true
+
+stag-clean:
+    rules:
+        - when: on_failure
+        - if: $CI_COMMIT_TAG
+    stage: stag-clean
+    image: alpine/kubectl:latest
+    script:
+        - kubectl delete secret $CI_PROJECT_NAME -n staging
+    allow_failure: true
