@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pricing-service
+  labels:
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/component: background-services
 spec:
   selector:
     matchLabels:
@@ -12,6 +15,8 @@ spec:
       labels:
         app: pricing-service
         app.kubernetes.io/version: v1
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/component: background-services
     spec:
       containers:
         - name: pricing-service

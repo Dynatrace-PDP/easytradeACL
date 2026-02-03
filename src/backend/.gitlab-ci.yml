@@ -47,8 +47,8 @@ docker-dev:
     - docker build -t $CI_REGISTRY_IMAGE:DEV-MANAGER-$CI_PIPELINE_IID .
     - docker push $CI_REGISTRY_IMAGE:DEV-MANAGER-$CI_PIPELINE_IID
     - cd ../../problem-operator
-    - docker build -t $CI_REGISTRY_IMAGE:DEV-PROBLEMSOPERATOR-$CI_PIPELINE_IID .
-    - docker push $CI_REGISTRY_IMAGE:DEV-PROBLEMSOPERATOR-$CI_PIPELINE_IID
+    - docker build -t $CI_REGISTRY_IMAGE:DEV-PROBLEMOPERATOR-$CI_PIPELINE_IID .
+    - docker push $CI_REGISTRY_IMAGE:DEV-PROBLEMOPERATOR-$CI_PIPELINE_IID
     - cd ../rabbitmq
     - docker build -t $CI_REGISTRY_IMAGE:DEV-RABBITMQ-$CI_PIPELINE_IID .
     - docker push $CI_REGISTRY_IMAGE:DEV-RABBITMQ-$CI_PIPELINE_IID
@@ -78,7 +78,7 @@ deploy-to-dev:
         - |
             sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-ENGINE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
         - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
-        - ../manager/easyTradeManager
+        - cd ../manager/easyTradeManager
         - |
             sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-MANAGER-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
         - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"

@@ -89,7 +89,7 @@ deploy-to-dev:
         - |
             sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-BROKERSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
         - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
-        - ../calculationservice
+        - cd ../calculationservice
         - |
             sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:DEV-CALCULATIONSERVICE-$CI_PIPELINE_IID#" $CI_PROJECT_NAME.yaml
         - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
@@ -222,7 +222,7 @@ docker-stag:
         - docker push $CI_REGISTRY_IMAGE:LOGINSERVICE-$CI_COMMIT_TAG
         - docker pull $CI_REGISTRY_IMAGE:OFFERSERVICE-latest
         - docker tag $CI_REGISTRY_IMAGE:OFFERSERVICE-latest $CI_REGISTRY_IMAGE:OFFERSERVICE-$CI_COMMIT_TAG
-        - docker push $CI_REGISTRY_IMAGE:FEATUOFFERSERVICEREFLAGSERVICE-$CI_COMMIT_TAG
+        - docker push $CI_REGISTRY_IMAGE:OFFERSERVICE-$CI_COMMIT_TAG
         - docker pull $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest
         - docker tag $CI_REGISTRY_IMAGE:PRICINGSERVICE-latest $CI_REGISTRY_IMAGE:PRICINGSERVICE-$CI_COMMIT_TAG
         - docker push $CI_REGISTRY_IMAGE:PRICINGSERVICE-$CI_COMMIT_TAG

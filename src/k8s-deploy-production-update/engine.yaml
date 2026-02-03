@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: engine
+  labels:
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/component: backend
 spec:
   selector:
     matchLabels:
@@ -13,6 +16,7 @@ spec:
         app: engine
         app.kubernetes.io/part-of: easytrade
         app.kubernetes.io/version: v1
+        app.kubernetes.io/component: backend
     spec:
       containers:
         - name: engine

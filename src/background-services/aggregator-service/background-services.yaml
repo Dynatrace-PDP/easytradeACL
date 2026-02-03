@@ -12,7 +12,7 @@ kind: Deployment
 metadata:
   name: aggregator-service
   labels:
-        app.kubernetes.io/component: backend
+        app.kubernetes.io/component: background-services
         app.kubernetes.io/part-of: easytrade
 spec:
   selector:
@@ -22,7 +22,7 @@ spec:
     metadata:
       labels:
         app: aggregator-service
-        app.kubernetes.io/component: backend
+        app.kubernetes.io/component: background-services
         app.kubernetes.io/part-of: easytrade
     spec:
       containers:

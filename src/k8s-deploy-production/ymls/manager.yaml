@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: manager
+  labels:
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/component: backend
 spec:
   selector:
     matchLabels:
@@ -12,6 +15,8 @@ spec:
       labels:
         app: manager
         app.kubernetes.io/version: v1
+        app.kubernetes.io/part-of: easytrade
+        app.kubernetes.io/component: backend
     spec:
       containers:
         - name: manager
@@ -29,9 +34,9 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 300Mi
+              memory: 600Mi
             limits:
-              memory: 300Mi
+              memory: 600Mi
       imagePullSecrets:
         - name: proddeploycred 
 ---
