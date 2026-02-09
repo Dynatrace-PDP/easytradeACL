@@ -79,7 +79,7 @@ dt-event-push:
         - echo "$CI_COMMIT_MESSAGE"
         - echo "$CI_PIPELINE_IID"
         - |
-            PAYLOAD1='{ "entitySelector": "type(SERVICE),entityName.startsWith(frontend)", "eventType": "CUSTOM_INFO", "properties": { "Gitlab Build Number": "'
+            PAYLOAD1='{ "entitySelector": "type(SERVICE),entityName.contains(frontend)", "eventType": "CUSTOM_INFO", "properties": { "Gitlab Build Number": "'
         - |
             PAYLOAD2='", "Git commit": "'
         - |
