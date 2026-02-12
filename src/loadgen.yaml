@@ -18,7 +18,11 @@ spec:
           image: europe-docker.pkg.dev/dynatrace-demoability/docker/easytrade/loadgen:latest
           env:
             - name: EASYTRADE_URL
-              value: "http://frontendreverseproxy-easytrade"
+              value: "http://frontendreverseproxy-easytrade.prod.svc.cluster.local"
+            - name: CONCURRENCY
+              value: "2"
+            - name: BROWSER_TTL_MINUTES
+              value: "10"
           resources:
             requests:
               cpu: "1"
