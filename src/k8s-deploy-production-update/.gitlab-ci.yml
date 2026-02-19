@@ -10,6 +10,8 @@ stages:
    - dockerlogin
    - prod-update
    - dt-event
+   - frontendreverseproxy-update
+   - deploy-frontendreverseproxy-update
 
 variables:
   DOCKER_HOST: tcp://docker:2376
@@ -37,6 +39,8 @@ dockerlogin:
 kube-prod-update:
     stage: prod-update
     image: alpine/kubectl:latest
+    dependencies:
+      - dockerlogin
     script:
         - kubectl create secret docker-registry prodregcred --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$AUTH_TOKEN
         - echo "$CI_DEPLOY_USER, $CI_DEPLOY_PASSWORD"
@@ -89,3 +93,60 @@ dt-event-push:
             -H "Authorization: Api-Token $DT_ACCESS_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "$PAYLOAD"
+
+frontendreverseproxy-update:
+    stage: frontendreverseproxy-update
+    rules:
+      - if: $SERVICE == "loginservice"
+      - if: $SERVICE == "broker-service"
+      - if: $SERVICE == "accountservice"
+      - if: $SERVICE == "pricing-service"
+      - if: $SERVICE == "offerservice"
+      - if: $SERVICE == "engine"
+      - if: $SERVICE == "manager"
+      - if: $SERVICE == "cred-card-order-service"
+      - if: $SERVICE == "third-party-service"
+      - if: $SERVICE == "feature-flag-service"
+      - if: $SERVICE == "frontend"
+    image: docker:24.0.5
+    services:
+        - name: docker:24.0.5-dind
+          variables:
+            HEALTHCHECK_TCP_PORT: "2376"
+    before_script:
+        - docker info
+    script:
+        - docker login $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+        - cd frontendreverseproxy
+        - | 
+           sed -i "s#http://.*:#http://$SERVICE-$VERSION#" nginx.cong
+        - docker build -t $CI_REGISTRY_IMAGE:FRONTENDREVERSEPROXY-$VERSION .
+        - docker push $CI_REGISTRY_IMAGE:FRONTENDREVERSEPROXY-$VERSION 
+
+deploy-frontendreverseproxy-update:
+    rules:
+      - if: $SERVICE == "loginservice"
+      - if: $SERVICE == "broker-service"
+      - if: $SERVICE == "accountservice"
+      - if: $SERVICE == "pricing-service"
+      - if: $SERVICE == "offerservice"
+      - if: $SERVICE == "engine"
+      - if: $SERVICE == "manager"
+      - if: $SERVICE == "cred-card-order-service"
+      - if: $SERVICE == "third-party-service"
+      - if: $SERVICE == "feature-flag-service"
+      - if: $SERVICE == "frontend"
+    dependencies:
+        - frontendreverseproxy-update
+        - dockerlogin
+    stage: deploy-frontendreverseproxy-update
+    image: alpine/kubectl:latest
+    script:
+        - cd frontendreverseproxy
+        - |
+            sed -i "s#image: .*#image: $CI_REGISTRY_IMAGE:FRONTENDREVERSEPROXY-$VERSION#" $CI_PROJECT_NAME.yaml
+        - "kubectl -n dev apply -f $CI_PROJECT_NAME.yaml"
+        - sleep 10
+        - kubectl wait pod --all -l app.kubernetes.io/component=$CI_PROJECT_NAME  -n dev --for=condition=Ready --timeout=300s
+        - kubectl delete secret $CI_PROJECT_NAME
+        - kubectl delete secret $CI_PROJECT_NAME -n dev
